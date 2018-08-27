@@ -37,6 +37,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import scala.collection.Iterator;
 
 import static java.util.Arrays.asList;
 import static org.mockito.Mockito.doNothing;
@@ -113,14 +114,15 @@ public class SimpleAclOperatorTest {
             List<scala.collection.immutable.Set<Acl>> capturedAcls = aclCaptor.getAllValues();
             List<Resource> capturedResource = resourceCaptor.getAllValues();
 
-            context.assertEquals(2, capturedAcls.size());
-            context.assertEquals(2, capturedResource.size());
+            context.assertEquals(2, capturedAcls.get(0).size());
+            context.assertEquals(1, capturedResource.size());
 
             context.assertEquals(res1, capturedResource.get(0));
-            context.assertEquals(res1, capturedResource.get(1));
+            //context.assertEquals(res1, capturedResource.get(1));
 
-            context.assertEquals(set1, capturedAcls.get(0));
-            context.assertEquals(set2, capturedAcls.get(1));
+            Iterator<Acl> iter = capturedAcls.get(0).iterator();
+            context.assertEquals(set2.iterator().next(), iter.next());
+            context.assertEquals(set1.iterator().next(), iter.next());
 
             async.complete();
         });

@@ -10,8 +10,10 @@ import io.strimzi.operator.user.model.acl.SimpleAclRule;
 import io.strimzi.operator.user.model.acl.SimpleAclRuleResource;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import io.vertx.core.CompositeFuture;
@@ -100,21 +102,26 @@ public class SimpleAclOperator {
      */
     protected Future<ReconcileResult<Set<SimpleAclRule>>> internalCreate(String username, Set<SimpleAclRule> desired) {
         KafkaPrincipal principal = new KafkaPrincipal("User", username);
-        for (SimpleAclRule rule : desired)    {
-            if (log.isTraceEnabled()) {
-                log.trace("Adding Acl rule {}", rule);
-            }
-
-            try {
-                Acl acl = rule.toKafkaAcl(principal);
+        HashMap<Resource, Set<Acl>> map = new HashMap<>();
+        try {
+            for (SimpleAclRule rule: desired) {
                 Resource resource = rule.getResource().toKafkaResource();
-                scala.collection.immutable.Set<Acl> add = new scala.collection.immutable.Set.Set1<Acl>(acl);
-
-                authorizer.addAcls(add, resource);
-            } catch (Exception e)   {
-                log.error("Adding Acl rule {} for user {} failed", rule, username, e);
-                return Future.failedFuture(e);
+                Set<Acl> aclSet = map.get(resource);
+                if (aclSet == null) {
+                    aclSet = new HashSet<>();
+                }
+                aclSet.add(rule.toKafkaAcl(principal));
+                map.put(resource, aclSet);
             }
+
+            for (Map.Entry<Resource, Set<Acl>> entry: map.entrySet()) {
+                scala.collection.mutable.Set add = new scala.collection.mutable.HashSet<Acl>();
+                entry.getValue().forEach(a -> add.add(a));
+                authorizer.addAcls(add.toSet(), entry.getKey());
+            }
+        } catch (Exception e) {
+            log.error("Adding Acl rules for user {} failed", username, e);
+            return Future.failedFuture(e);
         }
 
         return Future.succeededFuture(ReconcileResult.created(desired));
@@ -155,24 +162,29 @@ public class SimpleAclOperator {
      * Deletes all ACLs for given user
      */
     protected Future<ReconcileResult<Set<SimpleAclRule>>> internalDelete(String username, Set<SimpleAclRule> current) {
+
         KafkaPrincipal principal = new KafkaPrincipal("User", username);
-        for (SimpleAclRule rule : current)    {
-            if (log.isTraceEnabled()) {
-                log.trace("Removing Acl rule {}", rule);
-            }
-
-            try {
-                Acl acl = rule.toKafkaAcl(principal);
+        HashMap<Resource, Set<Acl>> map = new HashMap<>();
+        try {
+            for (SimpleAclRule rule: current) {
                 Resource resource = rule.getResource().toKafkaResource();
-                scala.collection.immutable.Set<Acl> remove = new scala.collection.immutable.Set.Set1<Acl>(acl);
-
-                authorizer.removeAcls(remove, resource);
-            } catch (Exception e)   {
-                log.error("Deleting Acl rule {} for user {} failed", rule, username, e);
-                return Future.failedFuture(e);
+                Set<Acl> aclSet = map.get(resource);
+                if (aclSet == null) {
+                    aclSet = new HashSet<>();
+                }
+                aclSet.add(rule.toKafkaAcl(principal));
+                map.put(resource, aclSet);
             }
-        }
 
+            for (Map.Entry<Resource, Set<Acl>> entry: map.entrySet()) {
+                scala.collection.mutable.Set remove = new scala.collection.mutable.HashSet<Acl>();
+                entry.getValue().forEach(a -> remove.add(a));
+                authorizer.removeAcls(remove.toSet(), entry.getKey());
+            }
+        } catch (Exception e) {
+            log.error("Deleting Acl rules for user {} failed", username, e);
+            return Future.failedFuture(e);
+        }
         return Future.succeededFuture(ReconcileResult.deleted());
     }
 
